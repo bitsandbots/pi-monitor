@@ -23,6 +23,8 @@ from flask import Flask, jsonify, render_template, request, abort
 
 app = Flask(__name__)
 
+VERSION = "2.0.0"
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Configuration
 # ═══════════════════════════════════════════════════════════════════════════
@@ -45,10 +47,12 @@ CONFIG = {
 # ═══════════════════════════════════════════════════════════════════════════
 # Service List Persistence
 # ═══════════════════════════════════════════════════════════════════════════
-_SERVICES_FILE = Path(os.getenv(
-    "PIMONITOR_SERVICES_FILE",
-    str(Path(__file__).parent / "services.json"),
-))
+_SERVICES_FILE = Path(
+    os.getenv(
+        "PIMONITOR_SERVICES_FILE",
+        str(Path(__file__).parent / "services.json"),
+    )
+)
 
 
 def _load_services():
@@ -256,9 +260,7 @@ def get_cpu_usage() -> dict:
     load_avg = [float(x) for x in load_parts[:3]] if len(load_parts) >= 3 else [0, 0, 0]
 
     # Current frequency
-    cur_freq = _read_file(
-        "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", ""
-    )
+    cur_freq = _read_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "")
     freq_mhz = int(cur_freq) // 1000 if cur_freq else None
 
     return {
@@ -375,12 +377,8 @@ def get_network() -> dict:
             ip_out = _run(
                 f"ip -4 addr show {name} 2>/dev/null | grep -oP 'inet \\K[\\d.]+'"
             )
-            rx = int(
-                _read_file(f"/sys/class/net/{name}/statistics/rx_bytes", "0")
-            )
-            tx = int(
-                _read_file(f"/sys/class/net/{name}/statistics/tx_bytes", "0")
-            )
+            rx = int(_read_file(f"/sys/class/net/{name}/statistics/rx_bytes", "0"))
+            tx = int(_read_file(f"/sys/class/net/{name}/statistics/tx_bytes", "0"))
 
             prev = _net_prev.get(name, {"rx": rx, "tx": tx})
             rx_rate = max(0, round((rx - prev["rx"]) / elapsed)) if elapsed > 0 else 0
@@ -484,9 +482,7 @@ def get_services() -> list:
     for svc in CONFIG["services"]:
         active_raw = _run(f"systemctl is-active {svc} 2>/dev/null")
         enabled_raw = _run(f"systemctl is-enabled {svc} 2>/dev/null")
-        desc = _run(
-            f"systemctl show {svc} --property=Description --value 2>/dev/null"
-        )
+        desc = _run(f"systemctl show {svc} --property=Description --value 2>/dev/null")
         services.append(
             {
                 "name": svc,
@@ -651,7 +647,10 @@ def api_services():
 def api_service_control(name, action):
     result = control_service(name, action)
     level = "success" if result["success"] else "error"
-    log_event(f"Service {action}: {name} — {'OK' if result['success'] else result.get('error','failed')}", level)
+    log_event(
+        f"Service {action}: {name} — {'OK' if result['success'] else result.get('error','failed')}",
+        level,
+    )
     return jsonify(result), 200 if result["success"] else 400
 
 
@@ -671,14 +670,17 @@ def api_services_add():
     name = data.get("name", "").strip()
     if not name:
         return jsonify({"success": False, "error": "Service name required"}), 400
-    if not re.match(r'^[a-zA-Z0-9@._:-]+$', name):
+    if not re.match(r"^[a-zA-Z0-9@._:-]+$", name):
         return jsonify({"success": False, "error": "Invalid service name"}), 400
     if name in CONFIG["services"]:
         return jsonify({"success": False, "error": f"'{name}' already monitored"}), 409
     CONFIG["services"].append(name)
     _save_services()
     log_event(f"Service added to monitor list: {name}", "success")
-    return jsonify({"success": True, "service": name, "services": CONFIG["services"]}), 201
+    return (
+        jsonify({"success": True, "service": name, "services": CONFIG["services"]}),
+        201,
+    )
 
 
 @app.route("/api/services/config/<svc>", methods=["DELETE"])
@@ -701,7 +703,7 @@ def api_services_rename(svc):
     new_name = data.get("name", "").strip()
     if not new_name:
         return jsonify({"success": False, "error": "New name required"}), 400
-    if not re.match(r'^[a-zA-Z0-9@._:-]+$', new_name):
+    if not re.match(r"^[a-zA-Z0-9@._:-]+$", new_name):
         return jsonify({"success": False, "error": "Invalid service name"}), 400
     if svc not in CONFIG["services"]:
         return jsonify({"success": False, "error": f"'{svc}' not in list"}), 404
@@ -711,7 +713,9 @@ def api_services_rename(svc):
     CONFIG["services"][idx] = new_name
     _save_services()
     log_event(f"Service renamed: {svc} -> {new_name}", "success")
-    return jsonify({"success": True, "old": svc, "new": new_name, "services": CONFIG["services"]})
+    return jsonify(
+        {"success": True, "old": svc, "new": new_name, "services": CONFIG["services"]}
+    )
 
 
 @app.route("/api/power/<action>", methods=["POST"])
@@ -752,8 +756,7 @@ if __name__ == "__main__":
 
     marker = "PI" if info["is_raspberry_pi"] else "LINUX"
 
-    print(
-        f"""
+    print(f"""
 \033[36m╔══════════════════════════════════════════════════╗
 ║   Pi\033[33mMonitor\033[36m · v2.0.0                              ║
 ║   CoreConduit Consulting Services                 ║
@@ -765,7 +768,6 @@ if __name__ == "__main__":
   Services: {len(CONFIG['services'])} configured
   Listen:   http://{CONFIG['host']}:{CONFIG['port']}
 \033[36m╚══════════════════════════════════════════════════╝\033[0m
-"""
-    )
+""")
 
     app.run(host=CONFIG["host"], port=CONFIG["port"], debug=CONFIG["debug"])

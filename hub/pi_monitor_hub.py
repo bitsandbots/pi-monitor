@@ -26,6 +26,8 @@ from flask import Flask, jsonify, render_template, request, abort
 
 app = Flask(__name__)
 
+VERSION = "2.0.0"
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Configuration
 # ═══════════════════════════════════════════════════════════════════════════
@@ -39,10 +41,12 @@ HUB_CONFIG = {
     "discovery_port": int(os.getenv("PIHUB_DISCOVERY_PORT", "8585")),
 }
 
-_NODES_FILE = Path(os.getenv(
-    "PIHUB_NODES_FILE",
-    str(Path(__file__).parent / "hub_nodes.json"),
-))
+_NODES_FILE = Path(
+    os.getenv(
+        "PIHUB_NODES_FILE",
+        str(Path(__file__).parent / "hub_nodes.json"),
+    )
+)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Node Registry
@@ -53,8 +57,8 @@ _nodes = {}  # keyed by node_id (user-assigned or auto-generated)
 
 def _generate_id(host, port):
     """Generate a stable ID from host:port."""
-    safe = re.sub(r'[^a-zA-Z0-9]', '-', f"{host}-{port}")
-    return safe.strip('-')
+    safe = re.sub(r"[^a-zA-Z0-9]", "-", f"{host}-{port}")
+    return safe.strip("-")
 
 
 def _load_nodes():
@@ -262,7 +266,7 @@ def _discover_subnet(subnet=None, port=None, timeout=1.5):
     if not subnet:
         local_ip = _get_local_ip()
         # Default to the local /24
-        subnet = re.sub(r'\.\d+$', '.0/24', local_ip)
+        subnet = re.sub(r"\.\d+$", ".0/24", local_ip)
 
     try:
         network = IPv4Network(subnet, strict=False)
@@ -298,7 +302,8 @@ def _discover_subnet(subnet=None, port=None, timeout=1.5):
                         "hostname": boot.get("hostname", "") if boot else "",
                         "model": boot.get("model", "") if boot else "",
                         "id": _generate_id(ip, port),
-                        "already_registered": _generate_id(ip, port) in _get_all_nodes(),
+                        "already_registered": _generate_id(ip, port)
+                        in _get_all_nodes(),
                     }
         except Exception:
             pass
@@ -370,11 +375,13 @@ def api_fleet():
     fleet = [_serialize_node(n) for n in nodes.values()]
     fleet.sort(key=lambda x: (not x["online"], x["label"].lower()))
     online = sum(1 for n in fleet if n["online"])
-    return jsonify({
-        "nodes": fleet,
-        "total": len(fleet),
-        "online": online,
-    })
+    return jsonify(
+        {
+            "nodes": fleet,
+            "total": len(fleet),
+            "online": online,
+        }
+    )
 
 
 # ── Node CRUD ──
@@ -387,11 +394,14 @@ def api_add_node():
     token = data.get("token", "").strip()
     if not host:
         return jsonify({"success": False, "error": "Host required"}), 400
-    if not re.match(r'^[\d.a-zA-Z_:-]+$', host):
+    if not re.match(r"^[\d.a-zA-Z_:-]+$", host):
         return jsonify({"success": False, "error": "Invalid host"}), 400
     nid, created = _add_node(host, int(port), label, token)
     if not created:
-        return jsonify({"success": False, "error": "Node already registered", "id": nid}), 409
+        return (
+            jsonify({"success": False, "error": "Node already registered", "id": nid}),
+            409,
+        )
     # Trigger immediate poll
     threading.Thread(target=_poll_node, args=(nid,), daemon=True).start()
     return jsonify({"success": True, "id": nid}), 201
@@ -530,8 +540,7 @@ if __name__ == "__main__":
     node_count = len(_get_all_nodes())
     local_ip = _get_local_ip()
 
-    print(
-        f"""
+    print(f"""
 \033[33m╔══════════════════════════════════════════════════════════════╗
 ║   Pi\033[93mMonitor\033[33m Hub · Lord of the Pi Monitors                    ║
 ║   CoreConduit Consulting Services                              ║
@@ -544,8 +553,7 @@ if __name__ == "__main__":
   Polling:    every {HUB_CONFIG['poll_interval']}s
   Auth:       {'ENABLED' if HUB_CONFIG['auth_token'] else 'DISABLED'}
 \033[33m╚══════════════════════════════════════════════════════════════╝\033[0m
-"""
-    )
+""")
 
     app.run(
         host=HUB_CONFIG["host"],
