@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted Raspberry Pi system monitor and service control console written in Python. Single-file Flask backend, zero JavaScript dependencies, no build step.
 
-Built for [CoreConduit Consulting Services](https://coreconduit.io) infrastructure.
+Built for [CoreConduit Consulting Services](https://coreconduit.com) infrastructure.
 
 ## Features
 
