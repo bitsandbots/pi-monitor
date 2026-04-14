@@ -36,11 +36,21 @@ Built for [CoreConduit Consulting Services](https://coreconduit.com) infrastruct
 
 ## Quick Start
 
-```bash
-# Clone or copy to your Pi
-sudo mkdir -p /opt/pi-monitor
-sudo cp -r . /opt/pi-monitor/
+### One-command install (recommended)
 
+```bash
+git clone https://github.com/coreconduit/pi-monitor
+cd pi-monitor
+sudo ./install.sh           # node agent only
+sudo ./install.sh --hub     # node agent + hub
+sudo ./install.sh --hub-only  # hub only
+```
+
+Access at `http://<pi-ip>:8585` (node) or `http://<pi-ip>:8686` (hub).
+
+### Manual install
+
+```bash
 # Install dependency
 pip install flask --break-system-packages
 
@@ -48,9 +58,7 @@ pip install flask --break-system-packages
 python3 pi_monitor.py
 ```
 
-Access at `http://<pi-ip>:8585`
-
-## Install as Service
+### Install as Service (manual)
 
 ```bash
 sudo cp pi-monitor.service /etc/systemd/system/
@@ -62,6 +70,12 @@ Check status:
 ```bash
 sudo systemctl status pi-monitor
 journalctl -u pi-monitor -f
+```
+
+### Uninstall
+
+```bash
+sudo ./install.sh --uninstall
 ```
 
 ## Configuration
