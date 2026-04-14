@@ -1,0 +1,163 @@
+# Pi**Monitor** v2.0
+
+A lightweight, self-hosted Raspberry Pi system monitor and service control console written in Python. Single-file Flask backend, zero JavaScript dependencies, no build step.
+
+Built for [CoreConduit Consulting Services](https://coreconduit.io) infrastructure.
+
+## Features
+
+### Monitoring
+- **CPU** — differential usage sampling (accurate real-time %), per-core stats, load averages, current frequency
+- **Temperature** — live reading with 60-second sparkline history
+- **Memory** — RAM, cached, buffers, swap, GPU memory (Pi-specific via `vcgencmd`)
+- **Storage** — all mounted filesystems with capacity bars
+- **Network** — interface enumeration, throughput rates (bytes/sec delta tracking), RX/TX sparklines
+- **Processes** — top processes by CPU with kill capability
+
+### Service Control
+- View systemd service status (active/enabled state)
+- Start, stop, restart services
+- Enable/disable services at boot
+- Configurable service whitelist (rejects unlisted services)
+
+### System Control
+- Reboot and shutdown with confirmation dialog
+- Hardware detection at boot (model, SoC, revision, architecture)
+- Event log (in-memory ring buffer, viewable in Logs tab)
+- Connection-lost detection with automatic reconnect indicator
+
+### UI
+- Boot animation sequence showing detected hardware
+- CoreConduit v2.1 branding (Exo 2 / Plus Jakarta Sans / IBM Plex Mono)
+- 7-tab dashboard: Overview, Services, Processes, Network, Storage, System, Logs
+- Responsive layout (desktop and mobile)
+- Toast notifications for all actions
+- Single HTML file — no build tools required
+
+## Quick Start
+
+```bash
+# Clone or copy to your Pi
+sudo mkdir -p /opt/pi-monitor
+sudo cp -r . /opt/pi-monitor/
+
+# Install dependency
+pip install flask --break-system-packages
+
+# Run directly
+python3 pi_monitor.py
+```
+
+Access at `http://<pi-ip>:8585`
+
+## Install as Service
+
+```bash
+sudo cp pi-monitor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now pi-monitor
+```
+
+Check status:
+```bash
+sudo systemctl status pi-monitor
+journalctl -u pi-monitor -f
+```
+
+## Configuration
+
+All configuration is via environment variables — no config files to manage.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PIMONITOR_HOST` | `0.0.0.0` | Bind address |
+| `PIMONITOR_PORT` | `8585` | Port |
+| `PIMONITOR_DEBUG` | `false` | Flask debug mode |
+| `PIMONITOR_TOKEN` | *(empty)* | Optional Bearer token for API auth |
+| `PIMONITOR_SERVICES` | `ssh,nginx,docker,...` | Comma-separated service whitelist |
+| `PIMONITOR_REFRESH` | `2` | Frontend polling interval (seconds) |
+
+### Configuring Services
+
+Option 1 — environment variable:
+```bash
+export PIMONITOR_SERVICES="ssh,nginx,docker,ollama,mosquitto"
+```
+
+Option 2 — edit `CONFIG["services"]` in `pi_monitor.py` directly.
+
+### Authentication
+
+Set `PIMONITOR_TOKEN` to require Bearer token auth on all API endpoints:
+
+```bash
+export PIMONITOR_TOKEN=my-secret-token
+```
+
+The web UI currently does not send auth headers — token auth is designed for API-only access. For UI auth, place PiMonitor behind a reverse proxy with basic auth.
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/ping` | GET | Health check (connection-lost detection) |
+| `/api/boot` | GET | Static hardware detection info |
+| `/api/status` | GET | CPU, temp, memory, uptime, network rates |
+| `/api/storage` | GET | Mounted filesystems |
+| `/api/network` | GET | Interfaces, MAC, IP, throughput rates |
+| `/api/processes` | GET | Top processes (`?limit=N`, max 50) |
+| `/api/processes/<pid>` | DELETE | Kill process (`?signal=15` or `?signal=9`) |
+| `/api/services` | GET | Systemd service statuses |
+| `/api/services/<name>/<action>` | POST | Control service (start/stop/restart/enable/disable) |
+| `/api/power/<action>` | POST | Reboot or shutdown |
+| `/api/logs` | GET | Event log (`?limit=N`, default 100) |
+
+## Sudoers (optional, for non-root)
+
+If running as a non-root user, add scoped sudoers rules:
+
+```bash
+# /etc/sudoers.d/pi-monitor
+# Restrict to specific services rather than wildcards
+pimonitor ALL=(ALL) NOPASSWD: /usr/bin/systemctl start ssh nginx docker ollama mosquitto
+pimonitor ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop ssh nginx docker ollama mosquitto
+pimonitor ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ssh nginx docker ollama mosquitto
+pimonitor ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable ssh nginx docker ollama mosquitto
+pimonitor ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable ssh nginx docker ollama mosquitto
+pimonitor ALL=(ALL) NOPASSWD: /sbin/reboot
+pimonitor ALL=(ALL) NOPASSWD: /sbin/shutdown
+```
+
+**Important:** List each service explicitly rather than using wildcards to prevent privilege escalation.
+
+## Architecture
+
+```
+pi-monitor/
+├── pi_monitor.py          # Flask backend — all data collection + API + boot detection
+├── templates/
+│   └── index.html         # Self-contained frontend (HTML + CSS + JS, no build step)
+├── pi-monitor.service     # Systemd unit file
+├── requirements.txt       # Flask only
+└── README.md
+```
+
+### Key Design Decisions
+
+- **Differential CPU sampling** — reads `/proc/stat` on each poll and computes usage from the delta since the previous read, giving accurate instantaneous CPU percentage
+- **Network rate tracking** — stores previous byte counts per interface with timestamps; computes bytes/sec from the delta rather than showing cumulative totals
+- **Service whitelist** — `control_service()` rejects any service name not in `CONFIG["services"]` before invoking systemctl
+- **In-memory event log** — ring buffer (200 entries) captures service actions, kills, power events; no disk I/O
+- **Single dependency** — Flask only; reads system data from `/proc` and `/sys` directly, no psutil required
+- **Boot detection** — hardware identification runs once at startup and caches the result; Pi model, SoC, and revision are parsed from `/proc/cpuinfo` and `/proc/device-tree/model`
+
+## Requirements
+
+- Python 3.9+
+- Flask 3.0+
+- Raspberry Pi OS / Debian / Ubuntu (any Linux with `/proc` and `systemd`)
+- `sudo` access for service control and power management
+
+## License
+
+MIT — CoreConduit Consulting Services
