@@ -816,7 +816,7 @@ async function runDiscovery() {
   $('discover-status').textContent = 'Found ' + r.count + ' RPiMonitor instance' + (r.count !== 1 ? 's' : '') + '.';
 
   if (r.found.length === 0) {
-    $('discover-results').innerHTML = '<div style="color:var(--text-muted);font-family:var(--font-mono);font-size:13px;padding:14px">No PiMonitor instances found on this subnet.</div>';
+    $('discover-results').textContent = 'No RPiMonitor instances found on this subnet.';
     return;
   }
 
