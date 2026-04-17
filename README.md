@@ -1,4 +1,4 @@
-# RPi**Monitor** v2.0
+# RPi**Monitor** v2.0.1
 
 A lightweight, self-hosted Raspberry Pi system monitor and service control console written in Python. Single-file Flask backend, zero JavaScript dependencies, no build step.
 
@@ -77,6 +77,20 @@ journalctl -u rpi-monitor -f
 ```bash
 sudo ./install.sh --uninstall
 ```
+
+## v2.0.1 — Release Notes
+
+**Improvements:**
+- **Self-hosted fonts** — Fonts now served locally from `/static/fonts/` instead of Google Fonts CDN
+  - Improves privacy (no external font requests)
+  - Enables offline operation
+  - Reduces dependency on external services
+  - Faster initial page load for repeated visits
+
+**What's unchanged:**
+- All features, API endpoints, and configuration remain identical
+- Installation and upgrade process unchanged
+- No breaking changes — 100% compatible with v2.0.0
 
 ## Configuration
 
