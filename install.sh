@@ -100,9 +100,13 @@ install_node() {
   info "Installing RPiMonitor node agent → $INSTALL_DIR"
 
   mkdir -p "$INSTALL_DIR/templates"
+  mkdir -p "$INSTALL_DIR/static/fonts"
   cp rpi_monitor.py "$INSTALL_DIR/"
   cp templates/index.html "$INSTALL_DIR/templates/"
-  cp -r static "$INSTALL_DIR/" 2>/dev/null || true
+  # Copy static files (fonts for offline capability)
+  if [[ -d static ]]; then
+    cp -r static/* "$INSTALL_DIR/static/" 2>/dev/null || true
+  fi
   cp requirements.txt "$INSTALL_DIR/"
   [[ -f .env.example ]] && cp .env.example "$INSTALL_DIR/"
 
@@ -132,9 +136,13 @@ install_hub() {
   info "Installing RPiMonitor Hub → $INSTALL_DIR/hub"
 
   mkdir -p "$INSTALL_DIR/hub/templates"
+  mkdir -p "$INSTALL_DIR/hub/static/fonts"
   cp hub/rpi_monitor_hub.py "$INSTALL_DIR/hub/"
   cp hub/templates/hub.html "$INSTALL_DIR/hub/templates/"
-  cp -r static "$INSTALL_DIR/hub/" 2>/dev/null || true
+  # Copy static files (fonts for offline capability)
+  if [[ -d static ]]; then
+    cp -r static/* "$INSTALL_DIR/hub/static/" 2>/dev/null || true
+  fi
   cp hub/requirements.txt "$INSTALL_DIR/hub/"
   [[ -f hub/HUB_README.md ]] && cp hub/HUB_README.md "$INSTALL_DIR/hub/"
 

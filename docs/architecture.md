@@ -44,9 +44,16 @@ Browser
    - `get_cpu_temperature()` — reads `/sys/class/thermal/thermal_zone0/temp`.
    - `get_memory()` — parses `/proc/meminfo`.
    - `get_uptime()` — reads `/proc/uptime`.
-4. On-demand endpoints (`/api/storage`, `/api/network`, `/api/processes`) are fetched only when the dashboard tab is active.
-5. Mutating actions (service control, process kill, power) require a POST and pass through `require_auth` middleware if `PIMONITOR_TOKEN` is set.
-6. All mutations are written to the in-memory event log (ring buffer, 200 entries, accessible via `/api/logs`).
+4. On-demand endpoints (`/api/storage`, `/api/network`, `/api/processes`, `/api/services-with-ports`) are fetched only when the dashboard tab is active.
+5. `/api/services-with-ports` merges:
+   - `get_services()` — systemd service status via `systemctl is-active/is-enabled`
+   - `get_open_ports()` — listening ports via `ss -tuln`
+   - `_SERVICE_PORTS` mapping — common service→port associations
+6. `/api/logs?system=true` merges:
+   - In-memory event log (ring buffer)
+   - `get_system_errors()` — journalctl error entries
+7. Mutating actions (service control, process kill, power) require a POST and pass through `require_auth` middleware if `PIMONITOR_TOKEN` is set.
+8. All mutations are written to the in-memory event log (ring buffer, 200 entries, accessible via `/api/logs`).
 
 ## Hub — Data Flow
 

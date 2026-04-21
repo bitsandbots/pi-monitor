@@ -13,6 +13,7 @@ Built for [CoreConduit Consulting Services](https://coreconduit.com) infrastruct
 - **Storage** — all mounted filesystems with capacity bars
 - **Network** — interface enumeration, throughput rates (bytes/sec delta tracking), RX/TX sparklines
 - **Processes** — top processes by CPU with kill capability
+- **Ports** — open ports (0-9999) merged with services view
 
 ### Service Control
 - View systemd service status (active/enabled state)
@@ -78,19 +79,30 @@ journalctl -u rpi-monitor -f
 sudo ./install.sh --uninstall
 ```
 
-## v2.0.1 — Release Notes
+## v2.1.0 — Release Notes
+
+**New Features:**
+- **Services + Ports merged view** — Open ports (0-9999) now displayed alongside monitored services
+  - Shows port number and protocol next to service name
+  - Unmapped ports shown with "+ Add" button to create service associations
+  - Service-port mapping for common services (ssh=22, nginx=80, mysql=3306, etc.)
+- **System errors in Logs tab** — Toggle to show journalctl error entries alongside event log
+  - Real-time system error monitoring from `journalctl -p err`
+  - Merged view combines application events and system errors
+
+**New API Endpoints:**
+- `GET /api/ports` — List all listening TCP/UDP ports (0-9999)
+- `GET /api/system-errors` — Recent error-level journal entries
+- `GET /api/services-with-ports` — Merged services and ports data
+- `GET /api/logs?system=true` — Event log with system errors included
 
 **Improvements:**
-- **Self-hosted fonts** — Fonts now served locally from `/static/fonts/` instead of Google Fonts CDN
-  - Improves privacy (no external font requests)
-  - Enables offline operation
-  - Reduces dependency on external services
-  - Faster initial page load for repeated visits
+- Self-hosted fonts for offline capability (from v2.0.1)
 
 **What's unchanged:**
-- All features, API endpoints, and configuration remain identical
+- All existing API endpoints remain compatible
 - Installation and upgrade process unchanged
-- No breaking changes — 100% compatible with v2.0.0
+- Configuration options unchanged
 
 ## Configuration
 
@@ -136,9 +148,12 @@ The web UI currently does not send auth headers — token auth is designed for A
 | `/api/processes` | GET | Top processes (`?limit=N`, max 50) |
 | `/api/processes/<pid>` | DELETE | Kill process (`?signal=15` or `?signal=9`) |
 | `/api/services` | GET | Systemd service statuses |
+| `/api/services-with-ports` | GET | Services merged with open ports |
 | `/api/services/<name>/<action>` | POST | Control service (start/stop/restart/enable/disable) |
+| `/api/ports` | GET | Open TCP/UDP ports (0-9999) |
+| `/api/system-errors` | GET | Recent journalctl error entries |
 | `/api/power/<action>` | POST | Reboot or shutdown |
-| `/api/logs` | GET | Event log (`?limit=N`, default 100) |
+| `/api/logs` | GET | Event log (`?limit=N`, `?system=true`) |
 
 ## Sudoers (optional, for non-root)
 

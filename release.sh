@@ -43,8 +43,8 @@ for arg in "$@"; do
 done
 
 # ── Read current version ──────────────────────────────────────────────────────
-CURRENT_VERSION=$(grep '^VERSION = ' pi_monitor.py | sed 's/VERSION = "\(.*\)"/\1/')
-[[ -n "$CURRENT_VERSION" ]] || die "Could not read VERSION from pi_monitor.py"
+CURRENT_VERSION=$(grep '^VERSION = ' rpi_monitor.py | sed 's/VERSION = "\(.*\)"/\1/')
+[[ -n "$CURRENT_VERSION" ]] || die "Could not read VERSION from rpi_monitor.py"
 
 TARGET_VERSION="${NEW_VERSION:-$CURRENT_VERSION}"
 
@@ -107,8 +107,10 @@ RELEASE_FILES=(
   static
   rpi-monitor.service
   install.sh
+  release.sh
   .env.example
   README.md
+  docs
   hub/rpi_monitor_hub.py
   hub/requirements.txt
   hub/templates/hub.html

@@ -257,7 +257,9 @@ Response:
 #### `GET /api/logs`
 Retrieve the in-memory event log (ring buffer, max 200 entries).
 
-Query params: `?limit=50` (default 100).
+Query params:
+- `?limit=50` (default 100)
+- `?system=true` — Include system errors from journalctl
 
 ```json
 [
@@ -267,6 +269,78 @@ Query params: `?limit=50` (default 100).
 ```
 
 Log levels: `info`, `success`, `warning`, `error`.
+
+---
+
+### Ports
+
+#### `GET /api/ports`
+List all listening TCP/UDP ports in range 0-9999.
+
+```json
+[
+  {"port": 22, "protocol": "tcp", "address": "0.0.0.0"},
+  {"port": 80, "protocol": "tcp", "address": "*"},
+  {"port": 111, "protocol": "tcp", "address": "0.0.0.0"},
+  {"port": 111, "protocol": "udp", "address": "0.0.0.0"}
+]
+```
+
+Uses `ss -tuln` for fast enumeration (no port scanning).
+
+---
+
+### Services with Ports
+
+#### `GET /api/services-with-ports`
+Return systemd services merged with open port information.
+
+```json
+[
+  {
+    "name": "ssh",
+    "port": 22,
+    "protocol": "tcp",
+    "active": true,
+    "enabled": true,
+    "known": true,
+    "description": "OpenBSD Secure Shell server"
+  },
+  {
+    "name": null,
+    "port": 3306,
+    "protocol": "tcp",
+    "address": "127.0.0.1",
+    "known": false,
+    "description": "Port 3306/tcp"
+  }
+]
+```
+
+- `known: true` — Service is in the monitored list
+- `known: false` — Port is open but not mapped to a known service
+
+---
+
+### System Errors
+
+#### `GET /api/system-errors`
+Retrieve recent error-level journal entries.
+
+Query params: `?limit=50` (default 50, max 200).
+
+```json
+[
+  {
+    "ts": "14:22:01",
+    "unit": "nginx.service",
+    "msg": "Failed to start nginx.service",
+    "priority": "3"
+  }
+]
+```
+
+Uses `journalctl -p err` to filter for error priority.
 
 ---
 
