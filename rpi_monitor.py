@@ -543,6 +543,274 @@ def system_power(action: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Open Ports (0-9999)
+# ═══════════════════════════════════════════════════════════════════════════
+# Common service name to default port mappings
+_SERVICE_PORTS = {
+    # Well-known services
+    "ssh": 22,
+    "sshd": 22,
+    "http": 80,
+    "nginx": 80,
+    "apache2": 80,
+    "apache": 80,
+    "httpd": 80,
+    "https": 443,
+    "ssl": 443,
+    "mysql": 3306,
+    "mysqld": 3306,
+    "mariadb": 3306,
+    "postgresql": 5432,
+    "postgres": 5432,
+    "redis": 6379,
+    "redis-server": 6379,
+    "mongodb": 27017,
+    "mongod": 27017,
+    "docker": 2375,
+    "ftp": 21,
+    "vsftpd": 21,
+    "proftpd": 21,
+    "dns": 53,
+    "named": 53,
+    "bind9": 53,
+    "smtp": 25,
+    "postfix": 25,
+    "sendmail": 25,
+    "imap": 143,
+    "dovecot": 143,
+    "pop3": 110,
+    "ntp": 123,
+    "ntpd": 123,
+    "chrony": 123,
+    "vnc": 5900,
+    "vncserver": 5900,
+    "mosquitto": 1883,
+    "grafana-server": 3000,
+    "grafana": 3000,
+    "prometheus": 9090,
+    "node_exporter": 9100,
+    "ollama": 11434,
+    "chromadb": 8000,
+    # Pi-specific
+    "rpi-monitor": 8585,
+    "pimonitor": 8585,
+    "rpi-fleet": 5088,
+    "coreai": 5050,
+    "nexus": 8000,
+    "docsync-web": 8484,
+    "wiki-notebook": 5001,
+    "rag-chatbot": 7860,
+    "flow-analyzer": 8090,
+    "clippy": 5080,
+}
+
+
+def get_open_ports() -> list:
+    """Get all listening TCP/UDP ports in range 0-9999 using ss."""
+    ports = []
+    # ss -tuln = TCP/UDP, listening, numeric ports
+    # TCP uses LISTEN state, UDP uses UNCONN
+    # Format: Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port
+    output = _run("ss -tuln 2>/dev/null | grep -E 'LISTEN|UNCONN'")
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+        local = parts[4]  # Local Address:Port (index 4, not 3)
+        if ":" not in local:
+            continue
+        # Handle IPv6 [addr]:port and IPv4 addr:port
+        if local.startswith("["):
+            addr_port = local.rsplit(":", 1)
+            addr = addr_port[0].strip("[]") if len(addr_port) == 2 else "*"
+            port_str = addr_port[1] if len(addr_port) == 2 else ""
+        else:
+            addr_port = local.rsplit(":", 1)
+            addr = addr_port[0] or "*" if len(addr_port) == 2 else "*"
+            port_str = addr_port[1] if len(addr_port) == 2 else ""
+        try:
+            port = int(port_str)
+            if port > 9999:
+                continue
+            netid = parts[0].lower()
+            ports.append(
+                {
+                    "port": port,
+                    "protocol": "tcp" if "tcp" in netid else "udp",
+                    "address": addr if addr else "*",
+                }
+            )
+        except ValueError:
+            continue
+    # Sort by port number and remove duplicates
+    ports.sort(key=lambda x: (x["port"], x["protocol"]))
+    # Deduplicate by (port, protocol)
+    seen = set()
+    unique_ports = []
+    for p in ports:
+        key = (p["port"], p["protocol"])
+        if key not in seen:
+            seen.add(key)
+            unique_ports.append(p)
+    return unique_ports
+
+
+def get_services_with_ports() -> list:
+    """Get services with port information, including unknown ports."""
+    # Get configured services and their status
+    services = get_services()
+    ports = get_open_ports()
+
+    # Build a map of service name -> expected port
+    service_port_map = {}
+    for svc in services:
+        name = svc["name"].lower()
+        # Check if we know the default port for this service
+        for key, port in _SERVICE_PORTS.items():
+            if key in name or name in key:
+                service_port_map[port] = svc["name"]
+                break
+
+    # Build map of monitored services by name
+    monitored = {s["name"]: s for s in services}
+
+    # Find which ports are associated with monitored services
+    ports_with_services = []
+    used_ports = set()
+
+    for port_info in ports:
+        port = port_info["port"]
+        # Try to find a matching service
+        matching_service = None
+        for svc in services:
+            name_lower = svc["name"].lower()
+            # Check if this service typically uses this port
+            expected_port = _SERVICE_PORTS.get(name_lower)
+            if expected_port == port:
+                matching_service = svc["name"]
+                break
+            # Also check common variations
+            for key, p in _SERVICE_PORTS.items():
+                if p == port and (key in name_lower or name_lower in key):
+                    matching_service = svc["name"]
+                    break
+            if matching_service:
+                break
+
+        if matching_service:
+            used_ports.add(port)
+            ports_with_services.append(
+                {
+                    **port_info,
+                    "service": matching_service,
+                    "known": True,
+                }
+            )
+        else:
+            ports_with_services.append(
+                {
+                    **port_info,
+                    "service": None,
+                    "known": False,
+                }
+            )
+
+    # Add services that might not be listening (stopped services)
+    result = []
+    for svc in services:
+        svc_ports = [p for p in ports_with_services if p.get("service") == svc["name"]]
+        if svc_ports:
+            # Use the first matching port for this service
+            result.append(
+                {
+                    **svc,
+                    "port": svc_ports[0]["port"],
+                    "protocol": svc_ports[0]["protocol"],
+                    "known": True,
+                }
+            )
+        else:
+            # Service not listening (stopped or no port)
+            result.append(
+                {
+                    **svc,
+                    "port": None,
+                    "protocol": None,
+                    "known": True,
+                }
+            )
+
+    # Add unknown ports (not associated with any monitored service)
+    for port_info in ports_with_services:
+        if not port_info.get("service") and port_info["port"] not in used_ports:
+            result.append(
+                {
+                    "name": None,
+                    "port": port_info["port"],
+                    "protocol": port_info["protocol"],
+                    "address": port_info["address"],
+                    "active": False,
+                    "enabled": False,
+                    "description": f"Port {port_info['port']}/{port_info['protocol']}",
+                    "known": False,
+                }
+            )
+
+    # Sort: known services first, then by port (None ports go last)
+    result.sort(key=lambda x: (not x.get("known", False), x.get("port") or 99999))
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# System Errors (journalctl)
+# ═══════════════════════════════════════════════════════════════════════════
+def get_system_errors(limit: int = 50) -> list:
+    """Get recent error-level journal entries."""
+    errors = []
+    # -p err = priority error and below, --no-pager
+    output = _run(
+        f"journalctl -p err -n {min(limit, 200)} --no-pager -o json 2>/dev/null || "
+        f"journalctl -p err -n {min(limit, 200)} --no-pager 2>/dev/null"
+    )
+    if not output:
+        return errors
+    for line in output.strip().splitlines():
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+            ts_raw = data.get("__REALTIME_TIMESTAMP", "")
+            # Convert microseconds timestamp to readable
+            if ts_raw and ts_raw.isdigit():
+                ts_usec = int(ts_raw)
+                ts = datetime.fromtimestamp(ts_usec / 1_000_000).strftime("%H:%M:%S")
+            else:
+                ts = ""
+            errors.append(
+                {
+                    "ts": ts,
+                    "unit": data.get(
+                        "_SYSTEMD_UNIT", data.get("SYSLOG_IDENTIFIER", "system")
+                    ),
+                    "msg": data.get("MESSAGE", ""),
+                    "priority": data.get("PRIORITY", "3"),
+                }
+            )
+        except json.JSONDecodeError:
+            # Plain text fallback
+            if line.strip():
+                errors.append(
+                    {
+                        "ts": "",
+                        "unit": "system",
+                        "msg": line.strip(),
+                        "priority": "3",
+                    }
+                )
+    return errors
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Event Log (in-memory ring buffer)
 # ═══════════════════════════════════════════════════════════════════════════
 _log_lock = threading.Lock()
@@ -642,6 +910,13 @@ def api_services():
     return jsonify(get_services())
 
 
+@app.route("/api/services-with-ports")
+@require_auth
+def api_services_with_ports():
+    """Return services merged with port information."""
+    return jsonify(get_services_with_ports())
+
+
 @app.route("/api/services/<name>/<action>", methods=["POST"])
 @require_auth
 def api_service_control(name, action):
@@ -732,7 +1007,35 @@ def api_power(action):
 @require_auth
 def api_logs():
     limit = request.args.get("limit", 100, type=int)
-    return jsonify(get_log(limit))
+    include_system = request.args.get("system", "false").lower() == "true"
+    events = get_log(limit)
+    if include_system:
+        system_errors = get_system_errors(limit)
+        # Merge and sort by timestamp
+        combined = events + [
+            {"ts": e["ts"], "msg": f"[{e['unit']}] {e['msg']}", "level": "error"}
+            for e in system_errors
+            if e.get("msg")
+        ]
+        # Sort by timestamp (events have HH:MM:SS format)
+        combined.sort(key=lambda x: x.get("ts", ""))
+        return jsonify(combined[-limit:])
+    return jsonify(events)
+
+
+@app.route("/api/ports")
+@require_auth
+def api_ports():
+    """Return all listening TCP/UDP ports in range 0-9999."""
+    return jsonify(get_open_ports())
+
+
+@app.route("/api/system-errors")
+@require_auth
+def api_system_errors():
+    """Return recent error-level journal entries."""
+    limit = request.args.get("limit", 50, type=int)
+    return jsonify(get_system_errors(limit))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

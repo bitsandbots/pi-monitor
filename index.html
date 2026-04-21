@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>RPiMonitor — {{ boot.hostname or 'loading' }}</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230c1a2e'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%232b7de9' font-family='sans-serif' font-weight='bold'>π</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+@font-face { font-family:"Exo 2"; src:url("/static/fonts/exo-2-latin-700-normal.woff2") format("woff2"); font-weight:700; font-display:swap; }
+@font-face { font-family:"Plus Jakarta Sans"; src:url("/static/fonts/plus-jakarta-sans-latin-400-normal.woff2") format("woff2"); font-weight:400; font-display:swap; }
+@font-face { font-family:"Plus Jakarta Sans"; src:url("/static/fonts/plus-jakarta-sans-latin-600-normal.woff2") format("woff2"); font-weight:600; font-display:swap; }
+@font-face { font-family:"IBM Plex Mono"; src:url("/static/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight:400; font-display:swap; }
+</style>
 <style>
 /* ═══ Foundation ═══ */
 :root {
@@ -515,7 +520,13 @@ body {
     <!-- ══ LOGS ══ -->
     <div class="panel" id="panel-logs">
       <div class="card" style="--accent-color:var(--green)">
-        <div class="card-hdr">Event Log <button onclick="refreshLogs()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;font-size:9px;font-family:var(--font-mono);cursor:pointer">Refresh</button></div>
+        <div class="card-hdr">Event Log
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:10px;color:var(--text-muted);cursor:pointer">
+            <input type="checkbox" id="log-system-toggle" onchange="refreshLogs()" style="accent-color:var(--blue)">
+            <span>Show System Errors</span>
+          </label>
+          <button onclick="refreshLogs()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;font-size:9px;font-family:var(--font-mono);cursor:pointer;margin-left:8px">Refresh</button>
+        </div>
         <div class="log-area" id="log-area"></div>
       </div>
     </div>
@@ -774,28 +785,48 @@ async function refreshStatus() {
 
 async function refreshTab() {
   if (activeTab === 'services') {
-    const svcs = await api('services');
-    if (!svcs) return;
-    const active = svcs.filter(s => s.active).length;
-    $('svc-summary').textContent = `SYSTEMD SERVICES · ${active}/${svcs.length} ACTIVE`;
-    $('svc-list').innerHTML = svcs.map(s => `
-      <div class="card svc-item" style="--accent-color:${s.active?'var(--green)':'var(--border)'}" id="svc-card-${s.name}">
-        <span class="svc-dot ${s.active?'on':'off'}"></span>
-        <div class="svc-info" id="svc-info-${s.name}">
-          <div class="svc-name">${esc(s.name)}</div>
-          <div class="svc-desc">${esc(s.description)}</div>
-        </div>
-        <span class="svc-badge ${s.enabled?'enabled':'disabled'}">${s.enabled?'enabled':'disabled'}</span>
-        <div class="svc-actions">
-          <button class="svc-btn ${s.active?'halt':'go'}" onclick="svcAction('${s.name}','${s.active?'stop':'start'}')">${s.active?'Stop':'Start'}</button>
-          <button class="svc-btn cyc" onclick="svcAction('${s.name}','restart')">↻</button>
-          <button class="svc-btn tog" onclick="svcAction('${s.name}','${s.enabled?'disable':'enable'}')">${s.enabled?'Disable':'Enable'}</button>
-        </div>
-        <div class="svc-meta-btns">
-          <button class="svc-edit-btn" onclick="startEditService('${s.name}')" title="Rename">✎</button>
-          <button class="svc-remove-btn" onclick="confirmRemoveService('${s.name}')" title="Remove from list">✕</button>
-        </div>
-      </div>`).join('');
+    const data = await api('services-with-ports');
+    if (!data) return;
+    const known = data.filter(s => s.known);
+    const unknown = data.filter(s => !s.known);
+    const active = known.filter(s => s.active).length;
+    $('svc-summary').textContent = `SERVICES & PORTS · ${active}/${known.length} ACTIVE · ${unknown.length} UNMAPPED`;
+    $('svc-list').innerHTML = data.map(s => {
+      if (s.known) {
+        // Known service (monitored)
+        const portStr = s.port ? `${s.port}/${s.protocol}` : '—';
+        return `<div class="card svc-item" style="--accent-color:${s.active?'var(--green)':'var(--border)'}" id="svc-card-${s.name}">
+          <span class="svc-dot ${s.active?'on':'off'}"></span>
+          <div class="svc-info" id="svc-info-${s.name}">
+            <div class="svc-name">${esc(s.name)}${s.port?` <span style="color:var(--cyan);font-weight:400">${portStr}</span>`:''}</div>
+            <div class="svc-desc">${esc(s.description)}</div>
+          </div>
+          <span class="svc-badge ${s.enabled?'enabled':'disabled'}">${s.enabled?'enabled':'disabled'}</span>
+          <div class="svc-actions">
+            <button class="svc-btn ${s.active?'halt':'go'}" onclick="svcAction('${s.name}','${s.active?'stop':'start'}')">${s.active?'Stop':'Start'}</button>
+            <button class="svc-btn cyc" onclick="svcAction('${s.name}','restart')">↻</button>
+            <button class="svc-btn tog" onclick="svcAction('${s.name}','${s.enabled?'disable':'enable'}')">${s.enabled?'Disable':'Enable'}</button>
+          </div>
+          <div class="svc-meta-btns">
+            <button class="svc-edit-btn" onclick="startEditService('${s.name}')" title="Rename">✎</button>
+            <button class="svc-remove-btn" onclick="confirmRemoveService('${s.name}')" title="Remove from list">✕</button>
+          </div>
+        </div>`;
+      } else {
+        // Unknown port (not mapped to a service)
+        return `<div class="card svc-item" style="--accent-color:var(--cyan);opacity:0.8">
+          <span class="svc-dot" style="background:var(--cyan);box-shadow:0 0 6px rgba(34,211,238,0.4)"></span>
+          <div class="svc-info">
+            <div class="svc-name"><span style="color:var(--cyan)">${s.port}</span><span style="color:var(--text-muted);font-weight:400">/${s.protocol}</span></div>
+            <div class="svc-desc">${s.address === '*' ? 'All interfaces' : esc(s.address)}</div>
+          </div>
+          <span class="svc-badge" style="background:#1a2a3a;color:var(--text-muted)">unknown</span>
+          <div class="svc-actions" style="margin-left:auto">
+            <button class="svc-btn go" onclick="addServiceForPort(${s.port},'${s.protocol}')" title="Add to monitored services">+ Add</button>
+          </div>
+        </div>`;
+      }
+    }).join('');
   }
 
   if (activeTab === 'processes') {
@@ -864,7 +895,9 @@ async function refreshTab() {
 
 // ── Logs ──
 async function refreshLogs() {
-  const logs = await api('logs?limit=100');
+  const includeSystem = $('log-system-toggle') && $('log-system-toggle').checked;
+  const endpoint = includeSystem ? 'logs?limit=100&system=true' : 'logs?limit=100';
+  const logs = await api(endpoint);
   if (!logs) return;
   const area = $('log-area');
   area.innerHTML = logs.map(l =>
@@ -911,6 +944,18 @@ async function addService() {
   if (r && r.success) {
     toast(`Added ${name} to monitor list`, 'success');
     toggleAddService();
+    setTimeout(refreshTab, 300);
+  } else {
+    toast(r?.error || 'Failed to add service', 'error');
+  }
+}
+
+async function addServiceForPort(port, protocol) {
+  const name = prompt(`Enter service name for port ${port}/${protocol}:`, '');
+  if (!name || !name.trim()) return;
+  const r = await apiJson('services/config', 'POST', { name: name.trim() });
+  if (r && r.success) {
+    toast(`Added ${name.trim()} to monitor list`, 'success');
     setTimeout(refreshTab, 300);
   } else {
     toast(r?.error || 'Failed to add service', 'error');
